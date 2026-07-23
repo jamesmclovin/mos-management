@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mo's Management</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F4A7BF">
+<meta name="color-scheme" content="light">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mo's">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ CLIENT LIST ============ -->
+<section class="screen is-active" id="screen-list">
+  <header class="bar">
+    <button class="bar-btn" id="btn-settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.6 7.6 0 0 0-1.7-1l-.3-2.5h-4l-.3 2.5c-.6.2-1.2.6-1.7 1l-2.3-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.4 2.3-1c.5.4 1.1.8 1.7 1l.3 2.5h4l.3-2.5c.6-.2 1.2-.6 1.7-1l2.3 1 2-3.4-2-1.5Z"/></svg>
+    </button>
+    <h1 class="bar-title">Client List</h1>
+    <button class="bar-btn" id="btn-plus" aria-label="Add">
+      <svg viewBox="0 0 24 24" class="ic"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+  </header>
+
+  <div class="list-head">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" class="ic search-ic"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input type="search" id="search" placeholder="Search clients" autocomplete="off" autocorrect="off"
+             autocapitalize="none" spellcheck="false" enterkeyhint="search">
+      <button class="search-clear" id="search-clear" aria-label="Clear search" hidden>&times;</button>
+    </div>
+    <div class="chips" id="folder-chips"></div>
+  </div>
+
+  <div class="scroller" id="list-scroll">
+    <div id="client-list"></div>
+    <div class="empty" id="list-empty" hidden></div>
+    <div class="pad-bottom"></div>
+  </div>
+</section>
+
+<!-- ============ CLIENT DETAIL ============ -->
+<section class="screen" id="screen-client">
+  <header class="bar">
+    <button class="bar-btn bar-back" id="btn-detail-back"><svg viewBox="0 0 24 24" class="ic"><path d="m15 5-7 7 7 7"/></svg><span>Clients</span></button>
+    <h1 class="bar-title" id="detail-title"></h1>
+    <button class="bar-btn bar-text" id="btn-detail-edit">Edit</button>
+  </header>
+  <div class="scroller">
+    <div id="detail-body"></div>
+    <div class="pad-bottom"></div>
+  </div>
+</section>
+
+<!-- ============ CLIENT EDITOR ============ -->
+<section class="screen" id="screen-edit">
+  <header class="bar">
+    <button class="bar-btn bar-text" id="btn-edit-cancel">Cancel</button>
+    <h1 class="bar-title" id="edit-title">New Client</h1>
+    <button class="bar-btn bar-text bar-strong" id="btn-edit-save">Save</button>
+  </header>
+  <div class="scroller">
+    <form id="client-form" autocomplete="off" novalidate>
+      <div class="card">
+        <label class="field">
+          <span class="lbl">Name</span>
+          <input type="text" id="f-name" placeholder="Client name" autocapitalize="words" enterkeyhint="next">
+        </label>
+        <label class="field">
+          <span class="lbl">Folder</span>
+          <div class="select-wrap"><select id="f-folder"></select></div>
+        </label>
+      </div>
+
+      <p class="section-label">Formula</p>
+      <div class="card">
+        <label class="field"><span class="lbl">Roots</span><input type="text" id="f-roots" autocapitalize="sentences"></label>
+        <label class="field"><span class="lbl">Gloss / Toner</span><input type="text" id="f-gloss" autocapitalize="sentences"></label>
+        <label class="field"><span class="lbl">Developer</span><input type="text" id="f-developer" autocapitalize="sentences"></label>
+        <label class="field"><span class="lbl">Processing Time</span><input type="text" id="f-time" autocapitalize="sentences"></label>
+        <label class="field"><span class="lbl">Other</span><input type="text" id="f-other" autocapitalize="sentences"></label>
+      </div>
+
+      <p class="section-label">Notes</p>
+      <div class="card">
+        <textarea id="f-notes" rows="6" placeholder="Anything worth remembering…" autocapitalize="sentences"></textarea>
+      </div>
+
+      <div class="danger-wrap" id="edit-delete-wrap" hidden>
+        <button type="button" class="btn-danger" id="btn-edit-delete">Delete Client</button>
+      </div>
+    </form>
+    <div class="pad-bottom"></div>
+  </div>
+</section>
+
+<!-- ============ FOLDER EDITOR ============ -->
+<section class="screen" id="screen-folder">
+  <header class="bar">
+    <button class="bar-btn bar-text" id="btn-folder-cancel">Cancel</button>
+    <h1 class="bar-title" id="folder-title">New Folder</h1>
+    <button class="bar-btn bar-text bar-strong" id="btn-folder-save">Save</button>
+  </header>
+  <div class="scroller">
+    <div class="card">
+      <label class="field">
+        <span class="lbl">Folder Name</span>
+        <input type="text" id="f-folder-name" placeholder="e.g. Boulder" autocapitalize="words" enterkeyhint="done">
+      </label>
+    </div>
+    <div class="danger-wrap" id="folder-delete-wrap" hidden>
+      <button type="button" class="btn-danger" id="btn-folder-delete">Delete Folder</button>
+      <p class="hint">Clients in this folder are kept — they just move to All Clients.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section class="screen" id="screen-settings">
+  <header class="bar">
+    <button class="bar-btn bar-back" id="btn-settings-back"><svg viewBox="0 0 24 24" class="ic"><path d="m15 5-7 7 7 7"/></svg><span>Clients</span></button>
+    <h1 class="bar-title">Settings</h1>
+    <span class="bar-btn" aria-hidden="true"></span>
+  </header>
+  <div class="scroller">
+    <p class="section-label">Backup</p>
+    <div class="card card-actions">
+      <button type="button" class="row-btn" id="btn-export">
+        <span>Back Up Now</span>
+        <span class="row-sub">Save all clients &amp; folders to a file</span>
+      </button>
+      <button type="button" class="row-btn" id="btn-import">
+        <span>Import Backup</span>
+        <span class="row-sub">Restore from a backup file</span>
+      </button>
+    </div>
+    <p class="hint">Back up now and then. Your data lives only on this iPhone.</p>
+
+    <p class="section-label">About</p>
+    <div class="card">
+      <div class="kv"><span>Clients</span><b id="stat-clients">0</b></div>
+      <div class="kv"><span>Folders</span><b id="stat-folders">0</b></div>
+      <div class="kv"><span>Storage</span><b id="stat-storage">On this device</b></div>
+      <div class="kv"><span>Version</span><b id="stat-version">1.0</b></div>
+    </div>
+    <input type="file" id="import-file" accept="application/json,.json" hidden>
+    <div class="pad-bottom"></div>
+  </div>
+</section>
+
+<!-- ============ OVERLAYS ============ -->
+<div class="sheet-backdrop" id="sheet-backdrop" hidden>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true">
+    <button type="button" class="sheet-btn" id="sheet-new-client">New Client</button>
+    <button type="button" class="sheet-btn" id="sheet-new-folder">New Folder</button>
+    <button type="button" class="sheet-btn sheet-cancel" id="sheet-cancel">Cancel</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="confirm-backdrop" hidden>
+  <div class="modal" role="alertdialog" aria-modal="true">
+    <h2 id="confirm-title">Are you sure?</h2>
+    <p id="confirm-msg"></p>
+    <div class="modal-btns">
+      <button type="button" class="btn-soft" id="confirm-no">Cancel</button>
+      <button type="button" class="btn-solid btn-solid-danger" id="confirm-yes">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
