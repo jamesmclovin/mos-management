@@ -1,7 +1,7 @@
 /* Mo's Management — service worker.
    Precaches every asset so the app runs 100% offline after the first visit.
    Bump CACHE when you change any file. */
-var CACHE = 'mos-management-v3';
+var CACHE = 'mos-management-v4';
 
 var ASSETS = [
   './',
@@ -9,6 +9,7 @@ var ASSETS = [
   'styles.css',
   'app.js',
   'manifest.json',
+  'clients.json',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/icon-maskable-512.png',

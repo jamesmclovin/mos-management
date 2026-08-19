@@ -6,7 +6,7 @@
 (function () {
 'use strict';
 
-var APP_VERSION = '2.1';
+var APP_VERSION = '2.2';
 var DB_NAME = 'mos-management';
 var DB_VERSION = 1;
 var STORE_CLIENTS = 'clients';
@@ -809,6 +809,108 @@ $('btn-settings').addEventListener('click', function () {
 });
 $('btn-settings-back').addEventListener('click', back);
 
+/* Merge, never destroy. An imported client lands on an existing one when the
+   id or the name matches, so restoring a backup twice is harmless and a pack
+   of new clients simply gets added alongside whatever is already here. */
+function mergeImported(list) {
+  var byId = Object.create(null), byKey = Object.create(null);
+  var i, j, k;
+  for (i = 0; i < state.clients.length; i++) {
+    var ex = state.clients[i];
+    byId[ex.id] = ex;
+    if (!byKey[ex._k]) byKey[ex._k] = ex;
+  }
+
+  var addedClients = 0, addedNotes = 0, touched = 0;
+
+  for (j = 0; j < list.length; j++) {
+    var inc = list[j];
+    var tgt = byId[inc.id] || byKey[inc._k];
+
+    if (!tgt) {
+      state.clients.push(inc);
+      byId[inc.id] = inc;
+      if (!byKey[inc._k]) byKey[inc._k] = inc;
+      addedClients++;
+      addedNotes += inc.notes.length;
+      continue;
+    }
+
+    var seen = Object.create(null);
+    for (k = 0; k < tgt.notes.length; k++) seen[tgt.notes[k].id] = tgt.notes[k];
+
+    var changed = false;
+    for (k = 0; k < inc.notes.length; k++) {
+      var n = inc.notes[k];
+      if (seen[n.id]) {
+        seen[n.id].text = n.text;
+        seen[n.id].date = n.date;
+      } else {
+        tgt.notes.push(n);
+        seen[n.id] = n;
+        addedNotes++;
+      }
+      changed = true;
+    }
+    if (changed) {
+      sortNotes(tgt);
+      tgt.updatedAt = Date.now();
+      touched++;
+    }
+  }
+
+  sortByName(state.clients);
+  return { clients: addedClients, notes: addedNotes, merged: touched };
+}
+
+function applyImport(clients) {
+  var res = mergeImported(clients);
+  return DB.replaceAll(STORE_CLIENTS, state.clients.map(stripClient)).then(function () {
+    $('stat-clients').textContent = state.clients.length;
+    $('stat-notes').textContent = noteCount();
+    renderList();
+    if (state.viewingClientId) renderDetail();
+    var bits = [];
+    if (res.clients) bits.push(res.clients + ' client' + (res.clients === 1 ? '' : 's'));
+    if (res.notes) bits.push(res.notes + ' note' + (res.notes === 1 ? '' : 's'));
+    toast(bits.length ? 'Added ' + bits.join(' and ') : 'Everything was already here');
+    return res;
+  });
+}
+
+/* Reads clients bundled with the app itself — same origin, precached by the
+   service worker, so it works with no signal. */
+function loadClientPack() {
+  fetch('clients.json', { cache: 'no-cache' }).then(function (r) {
+    if (!r.ok) throw new Error('http ' + r.status);
+    return r.json();
+  }).then(function (data) {
+    if (!data || !Array.isArray(data.clients)) throw new Error('bad pack');
+    var clients = normalizeImported(data.clients);
+    if (!clients.length) { toast('That pack is empty.'); return; }
+    var notes = 0;
+    for (var i = 0; i < clients.length; i++) notes += clients[i].notes.length;
+    confirmDialog('Add ' + clients.length + ' clients?',
+      'Adds them with their ' + notes + ' notes. Nothing already on this phone is changed or deleted.',
+      'Add Them').then(function (ok) {
+      if (ok) applyImport(clients);
+    });
+  }).catch(function () {
+    toast('Could not load the client pack.');
+  });
+}
+
+function normalizeImported(raw) {
+  var out = [];
+  for (var i = 0; i < raw.length; i++) {
+    var r = raw[i];
+    if (!r || (!trim(r.name) && !r.id)) continue;
+    if (!r.id) r.id = uid();
+    out.push(decorate(migrateClient(r).client));
+  }
+  return out;
+}
+
 function backupPayload() {
   return {
     app: 'mos-management',
@@ -858,6 +960,7 @@ $('btn-export').addEventListener('click', function () {
 });
 
 $('btn-import').addEventListener('click', function () { $('import-file').click(); });
+$('btn-pack').addEventListener('click', loadClientPack);
 
 $('import-file').addEventListener('change', function () {
   var file = this.files && this.files[0];
@@ -875,35 +978,20 @@ $('import-file').addEventListener('change', function () {
 
     // Both backup generations import cleanly: old formula-style
     // clients are folded into dated notes on the way in.
-    var clients = [];
+    var clients = normalizeImported(data.clients);
     var count = 0;
-    for (var i = 0; i < data.clients.length; i++) {
-      var raw = data.clients[i];
-      if (!raw || (!trim(raw.name) && !raw.id)) continue;
-      if (!raw.id) raw.id = uid();
-      var m = migrateClient(raw);
-      clients.push(decorate(m.client));
-      count += m.client.notes.length;
-    }
+    for (var i = 0; i < clients.length; i++) count += clients[i].notes.length;
 
-    confirmDialog('Import backup?',
-      'This replaces everything on this device with ' + clients.length + ' client' +
-      (clients.length === 1 ? '' : 's') + ' and ' + count + ' note' +
-      (count === 1 ? '' : 's') + '.',
+    confirmDialog('Import this backup?',
+      'Adds ' + clients.length + ' client' + (clients.length === 1 ? '' : 's') +
+      ' and ' + count + ' note' + (count === 1 ? '' : 's') +
+      '. Nothing already on this phone is deleted.',
       'Import').then(function (ok) {
       if (!ok) return;
-      state.clients = clients;
-      sortByName(state.clients);
       state.query = '';
       $('search').value = '';
       $('search-clear').hidden = true;
-
-      DB.replaceAll(STORE_CLIENTS, state.clients.map(stripClient)).then(function () {
-        $('stat-clients').textContent = state.clients.length;
-        $('stat-notes').textContent = noteCount();
-        renderList();
-        toast('Imported ' + state.clients.length + ' client' + (state.clients.length === 1 ? '' : 's'));
-      });
+      applyImport(clients);
     });
   };
   try { reader.readAsText(file); } catch (e) { toast('Could not read that file.'); }
