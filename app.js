@@ -6,7 +6,7 @@
 (function () {
 'use strict';
 
-var APP_VERSION = '2.0';
+var APP_VERSION = '2.1';
 var DB_NAME = 'mos-management';
 var DB_VERSION = 1;
 var STORE_CLIENTS = 'clients';
@@ -311,13 +311,6 @@ $('confirm-backdrop').addEventListener('click', function (e) {
    Client list rendering — chunked, grows on scroll, so a
    keystroke costs the same at 5 clients or 5,000.
    ------------------------------------------------------------ */
-function summaryOf(c) {
-  if (!c.notes.length) return '';
-  var n = c.notes[0]; // newest first
-  var line = trim(n.text).split('\n')[0];
-  return fmtDate(n.date) + (line ? '  ·  ' + line : '');
-}
-
 function letterOf(c) {
   var ch = c._k.charAt(0).toUpperCase();
   return ch >= 'A' && ch <= 'Z' ? ch : '#';
@@ -340,13 +333,11 @@ var CHUNK = 60;
 var render = { list: [], cursor: 0, letter: null, grp: null };
 
 function rowHtml(c) {
-  var meta = summaryOf(c);
   return '<div class="row-wrap" data-id="' + esc(c.id) + '">' +
            '<button type="button" class="row-del" data-del="' + esc(c.id) + '">Delete</button>' +
            '<div class="row" role="button" tabindex="0">' +
              '<span class="row-main">' +
                '<span class="row-name">' + esc(c.name || 'Untitled') + '</span>' +
-               (meta ? '<span class="row-meta">' + esc(meta) + '</span>' : '') +
              '</span>' + CHEV +
            '</div>' +
          '</div>';
@@ -406,7 +397,7 @@ function renderList() {
     if (state.query) {
       emptyEl.innerHTML = '<b>🔍</b>No clients match “' + esc(state.query) + '”.';
     } else {
-      emptyEl.innerHTML = '<b>💕</b>No clients yet — tap + to add your first.';
+      emptyEl.innerHTML = '<b>🤍</b>No clients yet — tap + to add your first.';
     }
     return;
   }
@@ -475,6 +466,9 @@ var listHost = $('client-list');
 
 listHost.addEventListener('touchstart', function (e) {
   if (e.touches.length !== 1) { resetSwipe(); return; }
+  // A tap on the revealed Delete button must reach it as a click —
+  // don't snap the row shut underneath the finger.
+  if (e.target.closest('.row-del')) { resetSwipe(); sw.moved = false; return; }
   var row = e.target.closest('.row');
   sw.moved = false;
 

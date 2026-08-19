@@ -1,7 +1,7 @@
 /* Mo's Management — service worker.
    Precaches every asset so the app runs 100% offline after the first visit.
    Bump CACHE when you change any file. */
-var CACHE = 'mos-management-v2';
+var CACHE = 'mos-management-v3';
 
 var ASSETS = [
   './',

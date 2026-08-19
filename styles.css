@@ -1,13 +1,13 @@
-/* ===== Mo's Management ===== */
+/* ===== Mo's Management — charcoal ===== */
 :root{
-  --bg:#FDF2F5;
-  --card:#FCE7EE;
-  --accent:#F4A7BF;
-  --btn:#E8879F;
-  --text:#1A1A1A;
-  --muted:#8C6B75;
-  --line:rgba(232,135,159,.22);
-  --shadow:0 2px 10px rgba(214,140,163,.13);
+  --bg:#161618;
+  --card:#232326;
+  --accent:#8E8E93;
+  --btn:#E9E9EC;
+  --text:#F5F5F5;
+  --muted:#9A9AA0;
+  --line:rgba(255,255,255,.08);
+  --shadow:0 2px 10px rgba(0,0,0,.4);
   --r:18px;
   --safe-t:env(safe-area-inset-top,0px);
   --safe-b:env(safe-area-inset-bottom,0px);
@@ -87,7 +87,7 @@ button{border:0;background:none;padding:0;cursor:pointer}
 }
 .pad-bottom{height:calc(28px + var(--safe-b))}
 
-/* ---- search + chips ---- */
+/* ---- search ---- */
 .list-head{flex:0 0 auto;padding:0 14px 8px}
 .search-wrap{position:relative;display:flex;align-items:center}
 .search-ic{position:absolute;left:12px;width:19px;height:19px;color:var(--muted);opacity:.7;pointer-events:none}
@@ -99,6 +99,7 @@ button{border:0;background:none;padding:0;cursor:pointer}
   -webkit-appearance:none;appearance:none;
   font-size:17px;
 }
+#search::placeholder{color:var(--muted)}
 #search::-webkit-search-decoration,#search::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none}
 #search:focus{outline:2px solid var(--accent);outline-offset:-2px}
 .search-clear{
@@ -106,6 +107,7 @@ button{border:0;background:none;padding:0;cursor:pointer}
   width:30px;height:30px;border-radius:50%;
   font-size:22px;line-height:1;color:var(--muted);
 }
+
 /* ---- notes on the client page ---- */
 .section-row{
   display:flex;align-items:center;justify-content:space-between;
@@ -115,8 +117,8 @@ button{border:0;background:none;padding:0;cursor:pointer}
 .add-note-btn{
   width:40px;height:40px;border-radius:14px;
   display:flex;align-items:center;justify-content:center;
-  background:var(--btn);color:#fff;
-  box-shadow:0 3px 10px rgba(232,135,159,.35);
+  background:var(--btn);color:#141416;
+  box-shadow:0 3px 10px rgba(0,0,0,.35);
 }
 .add-note-btn .ic{width:21px;height:21px;stroke-width:2.4}
 .add-note-btn:active{transform:scale(.94);opacity:.85}
@@ -128,7 +130,7 @@ button{border:0;background:none;padding:0;cursor:pointer}
   padding:13px 16px 14px;
   margin-bottom:12px;
 }
-.note-card:active{background:#F8DBE5}
+.note-card:active{background:#2C2C30}
 .note-date{
   display:block;
   font-size:12.5px;font-weight:800;letter-spacing:.7px;
@@ -166,7 +168,7 @@ button{border:0;background:none;padding:0;cursor:pointer}
   position:relative;
   display:flex;align-items:center;gap:10px;
   width:100%;
-  padding:14px 14px 14px 16px;
+  padding:15px 14px 15px 16px;
   text-align:left;
   background:var(--card);
   will-change:transform;
@@ -175,18 +177,14 @@ button{border:0;background:none;padding:0;cursor:pointer}
 .row.settle{transition:transform .22s cubic-bezier(.3,.9,.4,1)}
 .row-main{flex:1 1 auto;min-width:0;display:block}
 .row-name{display:block;font-size:17px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row-meta{
-  display:block;font-size:13.5px;color:var(--muted);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;
-}
 .row-chev{flex:0 0 auto;width:17px;height:17px;color:var(--accent);
   fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
-.row:active{background:#F8DBE5}
+.row:active{background:#2C2C30}
 .row-del{
   position:absolute;top:0;right:0;bottom:0;width:96px;
   display:flex;align-items:center;justify-content:center;
   visibility:hidden;
-  background:#E2536F;color:#fff;font-weight:700;font-size:16px;
+  background:var(--btn);color:#141416;font-weight:700;font-size:16px;
 }
 .row-wrap.armed .row-del{visibility:visible}
 
@@ -215,13 +213,6 @@ button{border:0;background:none;padding:0;cursor:pointer}
   overflow:hidden;
 }
 .card + .card{margin-top:12px}
-.dt{padding:12px 16px}
-.dt + .dt{border-top:1px solid var(--line)}
-.dt-lbl{font-size:12.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--muted)}
-.dt-val{
-  margin-top:3px;font-size:17px;white-space:pre-wrap;word-break:break-word;
-  -webkit-user-select:text;user-select:text;
-}
 
 /* ---- forms ---- */
 .field{display:block;padding:10px 16px 12px;position:relative}
@@ -234,11 +225,13 @@ button{border:0;background:none;padding:0;cursor:pointer}
   -webkit-appearance:none;appearance:none;border-radius:0;
   -webkit-user-select:text;user-select:text;
 }
+.field input::placeholder,.card textarea::placeholder{color:var(--muted)}
 .field input:focus,.card textarea:focus{outline:none}
 .card textarea{
   padding:14px 16px;margin:0;resize:none;
   line-height:1.5;min-height:150px;display:block;
 }
+
 /* ---- buttons ---- */
 .card-actions{display:flex;flex-direction:column}
 .row-btn{
@@ -246,7 +239,7 @@ button{border:0;background:none;padding:0;cursor:pointer}
   padding:14px 16px;text-align:left;font-size:17px;font-weight:600;color:var(--text);
 }
 .row-btn + .row-btn{border-top:1px solid var(--line)}
-.row-btn:active{background:#F8DBE5}
+.row-btn:active{background:#2C2C30}
 .row-sub{font-size:13.5px;font-weight:400;color:var(--muted);margin-top:1px}
 .kv{display:flex;justify-content:space-between;gap:12px;padding:12px 16px;font-size:16px}
 .kv + .kv{border-top:1px solid var(--line)}
@@ -255,42 +248,24 @@ button{border:0;background:none;padding:0;cursor:pointer}
 .danger-wrap{margin-top:26px}
 .btn-danger{
   width:100%;padding:15px;border-radius:var(--r);
-  background:var(--card);color:#D2415F;font-weight:700;font-size:17px;
+  background:var(--card);color:#fff;font-weight:700;font-size:17px;
   box-shadow:var(--shadow);
 }
 .btn-danger:active{opacity:.65}
 
-/* ---- action sheet ---- */
-.sheet-backdrop,.modal-backdrop{
+/* ---- confirm modal ---- */
+.modal-backdrop{
   position:fixed;inset:0;z-index:50;
-  background:rgba(60,30,40,.32);
+  background:rgba(0,0,0,.55);
   display:flex;
   -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);
+  align-items:center;justify-content:center;padding:24px;
 }
-.sheet-backdrop{align-items:flex-end;justify-content:center}
-.sheet{
-  width:100%;max-width:520px;
-  padding:0 10px calc(10px + var(--safe-b));
-  animation:rise .22s cubic-bezier(.2,.9,.3,1);
-}
-@keyframes rise{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
-.sheet-btn{
-  display:block;width:100%;
-  padding:17px;margin-top:8px;
-  border-radius:20px;background:#fff;
-  font-size:18px;font-weight:600;color:var(--btn);
-  box-shadow:0 4px 18px rgba(120,60,80,.16);
-}
-.sheet-btn:active{background:#FBEAF0}
-.sheet-cancel{margin-top:10px;color:var(--muted);font-weight:700}
-
-/* ---- confirm modal ---- */
-.modal-backdrop{align-items:center;justify-content:center;padding:24px}
 .modal{
   width:100%;max-width:340px;
-  background:#fff;border-radius:22px;
+  background:#242428;border-radius:22px;
   padding:22px 20px 16px;text-align:center;
-  box-shadow:0 10px 40px rgba(120,60,80,.25);
+  box-shadow:0 10px 40px rgba(0,0,0,.5);
   animation:pop .18s ease-out;
 }
 @keyframes pop{from{transform:scale(.94);opacity:.5}to{transform:none;opacity:1}}
@@ -298,9 +273,9 @@ button{border:0;background:none;padding:0;cursor:pointer}
 .modal p{margin:0 0 18px;font-size:15px;color:var(--muted);line-height:1.45}
 .modal-btns{display:flex;gap:10px}
 .btn-soft,.btn-solid{flex:1;padding:13px;border-radius:15px;font-size:16px;font-weight:700}
-.btn-soft{background:var(--card);color:var(--text)}
-.btn-solid{background:var(--btn);color:#fff}
-.btn-solid-danger{background:#E2536F}
+.btn-soft{background:#39393E;color:var(--text)}
+.btn-solid{background:var(--btn);color:#141416}
+.btn-solid-danger{background:#fff;color:#141416}
 .btn-soft:active,.btn-solid:active{opacity:.7}
 
 /* ---- toast ---- */
@@ -310,9 +285,9 @@ button{border:0;background:none;padding:0;cursor:pointer}
   bottom:calc(26px + var(--safe-b));
   max-width:86%;
   padding:12px 20px;border-radius:18px;
-  background:rgba(26,26,26,.9);color:#fff;
+  background:rgba(245,245,245,.96);color:#141416;
   font-size:15px;font-weight:600;text-align:center;
-  box-shadow:0 6px 22px rgba(0,0,0,.22);
+  box-shadow:0 6px 22px rgba(0,0,0,.4);
   animation:pop .18s ease-out;
 }
 
