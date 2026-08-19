@@ -106,21 +106,45 @@ button{border:0;background:none;padding:0;cursor:pointer}
   width:30px;height:30px;border-radius:50%;
   font-size:22px;line-height:1;color:var(--muted);
 }
-.chips{
-  display:flex;gap:8px;margin-top:10px;
-  overflow-x:auto;overscroll-behavior-x:contain;
-  scrollbar-width:none;padding-bottom:2px;
+/* ---- notes on the client page ---- */
+.section-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin:18px 0 8px;
 }
-.chips::-webkit-scrollbar{display:none}
-.chip{
-  flex:0 0 auto;
-  padding:7px 15px;border-radius:16px;
-  background:var(--card);font-size:15px;font-weight:600;
-  white-space:nowrap;
+.section-row .section-label{margin:0 0 0 6px}
+.add-note-btn{
+  width:40px;height:40px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--btn);color:#fff;
+  box-shadow:0 3px 10px rgba(232,135,159,.35);
 }
-.chip.on{background:var(--btn);color:#fff}
-.chip:active{transform:scale(.97)}
-.chip-edit{font-size:13px;opacity:.65;margin-left:5px}
+.add-note-btn .ic{width:21px;height:21px;stroke-width:2.4}
+.add-note-btn:active{transform:scale(.94);opacity:.85}
+.note-card{
+  display:block;width:100%;text-align:left;
+  background:var(--card);
+  border-radius:var(--r);
+  box-shadow:var(--shadow);
+  padding:13px 16px 14px;
+  margin-bottom:12px;
+}
+.note-card:active{background:#F8DBE5}
+.note-date{
+  display:block;
+  font-size:12.5px;font-weight:800;letter-spacing:.7px;
+  text-transform:uppercase;color:var(--muted);
+  margin-bottom:4px;
+}
+.note-text{
+  display:block;font-size:16.5px;line-height:1.45;
+  white-space:pre-wrap;word-break:break-word;
+}
+.note-blank{color:var(--muted);font-style:italic}
+.note-date-head{
+  margin:8px 6px 8px;
+  font-size:13px;font-weight:800;letter-spacing:.9px;
+  color:var(--muted);text-transform:uppercase;
+}
 
 /* ---- client list ---- */
 .grp-head{
@@ -179,11 +203,6 @@ button{border:0;background:none;padding:0;cursor:pointer}
   margin:6px 4px 2px;line-height:1.2;
   -webkit-user-select:text;user-select:text;
 }
-.detail-folder{
-  display:inline-block;margin:6px 4px 4px;
-  padding:5px 12px;border-radius:14px;
-  background:var(--card);font-size:14px;font-weight:600;color:var(--muted);
-}
 .section-label{
   margin:22px 6px 8px;
   font-size:13px;font-weight:800;letter-spacing:.9px;
@@ -220,17 +239,6 @@ button{border:0;background:none;padding:0;cursor:pointer}
   padding:14px 16px;margin:0;resize:none;
   line-height:1.5;min-height:150px;display:block;
 }
-.select-wrap{position:relative;margin-top:3px}
-.select-wrap::after{
-  content:"";position:absolute;right:2px;top:8px;
-  width:8px;height:8px;border-right:2px solid var(--btn);border-bottom:2px solid var(--btn);
-  transform:rotate(45deg);pointer-events:none;
-}
-#f-folder{
-  width:100%;border:0;background:transparent;font-size:17px;
-  padding:2px 22px 2px 0;-webkit-appearance:none;appearance:none;border-radius:0;
-}
-
 /* ---- buttons ---- */
 .card-actions{display:flex;flex-direction:column}
 .row-btn{

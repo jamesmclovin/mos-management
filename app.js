@@ -1,15 +1,16 @@
 /* ============================================================
-   Mo's Management — offline client formula tracker
+   Mo's Management — offline client notes tracker
    Vanilla JS, no dependencies. Memory-first, IndexedDB-backed.
+   v2: Keep-style — each client holds dated notes. No folders.
    ============================================================ */
 (function () {
 'use strict';
 
-var APP_VERSION = '1.0';
+var APP_VERSION = '2.0';
 var DB_NAME = 'mos-management';
 var DB_VERSION = 1;
 var STORE_CLIENTS = 'clients';
-var STORE_FOLDERS = 'folders';
+var STORE_FOLDERS = 'folders';   // legacy store, emptied on migration
 
 /* ------------------------------------------------------------
    Tiny helpers
@@ -45,6 +46,14 @@ function toast(msg) {
 }
 
 function trim(v) { return (v == null ? '' : String(v)).trim(); }
+
+var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtDate(ts) {
+  var d = new Date(ts || Date.now());
+  if (isNaN(d.getTime())) d = new Date();
+  return MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+}
 
 /* ------------------------------------------------------------
    IndexedDB wrapper — every call resolves, never throws.
@@ -117,6 +126,9 @@ var DB = (function () {
     del: function (store, key) {
       return tx(store, 'readwrite', function (s) { s.delete(key); });
     },
+    clear: function (store) {
+      return tx(store, 'readwrite', function (s) { s.clear(); });
+    },
     replaceAll: function (store, list) {
       return tx(store, 'readwrite', function (s) {
         s.clear();
@@ -130,23 +142,12 @@ var DB = (function () {
    State
    ------------------------------------------------------------ */
 var state = {
-  clients: [],          // kept sorted by nameKey
-  folders: [],          // kept sorted by nameKey
-  folderById: Object.create(null),
-  filter: 'all',        // 'all' | folder id
+  clients: [],          // kept sorted by nameKey; each has notes: [{id,date,text}]
   query: '',
   editingClientId: null,
-  editingFolderId: null,
+  editingNoteId: null,  // null while composing a brand-new note
   viewingClientId: null
 };
-
-var FORMULA_FIELDS = [
-  ['roots', 'Roots'],
-  ['gloss', 'Gloss / Toner'],
-  ['developer', 'Developer'],
-  ['time', 'Processing Time'],
-  ['other', 'Other']
-];
 
 /* Fold to a plain lowercase key so "Émile" sorts, groups under E, and is
    found by typing "emile". Computed once per client, never per keystroke. */
@@ -165,21 +166,87 @@ function sortByName(list) {
   return list;
 }
 
+function sortNotes(c) {
+  c.notes.sort(function (a, b) { return (b.date || 0) - (a.date || 0); });
+}
+
 function decorate(c) {
   c._k = nameKey(c.name);
   return c;
 }
 
-function reindexFolders() {
-  state.folderById = Object.create(null);
-  for (var i = 0; i < state.folders.length; i++) {
-    state.folderById[state.folders[i].id] = state.folders[i];
-  }
-}
-
 function clientById(id) {
   for (var i = 0; i < state.clients.length; i++) if (state.clients[i].id === id) return state.clients[i];
   return null;
+}
+
+function noteById(c, id) {
+  if (!c) return null;
+  for (var i = 0; i < c.notes.length; i++) if (c.notes[i].id === id) return c.notes[i];
+  return null;
+}
+
+function stripClient(c) {
+  return {
+    id: c.id, name: c.name,
+    notes: c.notes.map(function (n) {
+      return { id: n.id, date: n.date, text: n.text };
+    }),
+    createdAt: c.createdAt || Date.now(),
+    updatedAt: c.updatedAt || Date.now()
+  };
+}
+
+/* ------------------------------------------------------------
+   Migration — old clients had formula fields and a notes string.
+   Fold everything they wrote into one dated note; lose nothing.
+   ------------------------------------------------------------ */
+var LEGACY_FIELDS = [
+  ['roots', 'Roots'],
+  ['gloss', 'Gloss / Toner'],
+  ['developer', 'Developer'],
+  ['time', 'Processing Time'],
+  ['other', 'Other']
+];
+
+function normalizeNote(n) {
+  if (!n || typeof n !== 'object') return null;
+  var text = n.text == null ? '' : String(n.text);
+  var date = typeof n.date === 'number' && isFinite(n.date) ? n.date : Date.now();
+  return { id: n.id ? String(n.id) : uid(), date: date, text: text };
+}
+
+function migrateClient(raw) {
+  var c = {
+    id: String(raw.id),
+    name: trim(raw.name),
+    notes: [],
+    createdAt: raw.createdAt || Date.now(),
+    updatedAt: raw.updatedAt || Date.now()
+  };
+
+  if (Array.isArray(raw.notes)) {
+    // already the new shape
+    for (var i = 0; i < raw.notes.length; i++) {
+      var n = normalizeNote(raw.notes[i]);
+      if (n) c.notes.push(n);
+    }
+    sortNotes(c);
+    return { client: c, migrated: false };
+  }
+
+  var parts = [];
+  for (var j = 0; j < LEGACY_FIELDS.length; j++) {
+    var v = trim(raw[LEGACY_FIELDS[j][0]]);
+    if (v) parts.push(LEGACY_FIELDS[j][1] + ': ' + v);
+  }
+  var freeText = trim(raw.notes);
+  if (freeText) parts.push(freeText);
+
+  if (parts.length) {
+    c.notes.push({ id: uid(), date: c.updatedAt, text: parts.join('\n') });
+  }
+  return { client: c, migrated: true };
 }
 
 /* ------------------------------------------------------------
@@ -241,34 +308,14 @@ $('confirm-backdrop').addEventListener('click', function (e) {
 });
 
 /* ------------------------------------------------------------
-   Action sheet
-   ------------------------------------------------------------ */
-function openSheet() { $('sheet-backdrop').hidden = false; }
-function closeSheet() { $('sheet-backdrop').hidden = true; }
-$('sheet-backdrop').addEventListener('click', function (e) {
-  if (e.target === $('sheet-backdrop')) closeSheet();
-});
-$('sheet-cancel').addEventListener('click', closeSheet);
-$('btn-plus').addEventListener('click', openSheet);
-$('sheet-new-client').addEventListener('click', function () { closeSheet(); openClientEditor(null); });
-$('sheet-new-folder').addEventListener('click', function () { closeSheet(); openFolderEditor(null); });
-
-/* ------------------------------------------------------------
-   List rendering
+   Client list rendering — chunked, grows on scroll, so a
+   keystroke costs the same at 5 clients or 5,000.
    ------------------------------------------------------------ */
 function summaryOf(c) {
-  var bits = [];
-  var f = state.folderById[c.folderId];
-  if (state.filter === 'all' && f) bits.push(f.name);
-  for (var i = 0; i < FORMULA_FIELDS.length; i++) {
-    var v = trim(c[FORMULA_FIELDS[i][0]]);
-    if (v) { bits.push(v); break; }
-  }
-  if (bits.length < 2) {
-    var n = trim(c.notes);
-    if (n) bits.push(n.split('\n')[0]);
-  }
-  return bits.join('  ·  ');
+  if (!c.notes.length) return '';
+  var n = c.notes[0]; // newest first
+  var line = trim(n.text).split('\n')[0];
+  return fmtDate(n.date) + (line ? '  ·  ' + line : '');
 }
 
 function letterOf(c) {
@@ -280,34 +327,15 @@ var CHEV = '<svg viewBox="0 0 24 24" class="row-chev"><path d="m9 5 7 7-7 7"/></
 
 function visibleClients() {
   var q = state.query;
-  var f = state.filter;
   var src = state.clients;
+  if (!q) return src.slice();
   var out = [];
   for (var i = 0; i < src.length; i++) {
-    var c = src[i];
-    if (f !== 'all' && c.folderId !== f) continue;
-    if (q && c._k.indexOf(q) === -1) continue;
-    out.push(c);
+    if (src[i]._k.indexOf(q) !== -1) out.push(src[i]);
   }
   return out;
 }
 
-function renderChips() {
-  var html = '<button type="button" class="chip' + (state.filter === 'all' ? ' on' : '') +
-             '" data-folder="all">All Clients</button>';
-  for (var i = 0; i < state.folders.length; i++) {
-    var f = state.folders[i];
-    var on = state.filter === f.id;
-    html += '<button type="button" class="chip' + (on ? ' on' : '') + '" data-folder="' + esc(f.id) + '">' +
-            esc(f.name) +
-            (on ? '<span class="chip-edit" data-edit="' + esc(f.id) + '">Edit</span>' : '') +
-            '</button>';
-  }
-  $('folder-chips').innerHTML = html;
-}
-
-/* The list renders in chunks and grows as she scrolls, so a keystroke costs
-   the same whether she has 5 clients or 5,000. */
 var CHUNK = 60;
 var render = { list: [], cursor: 0, letter: null, grp: null };
 
@@ -377,14 +405,8 @@ function renderList() {
     emptyEl.hidden = false;
     if (state.query) {
       emptyEl.innerHTML = '<b>🔍</b>No clients match “' + esc(state.query) + '”.';
-    } else if (state.filter !== 'all') {
-      var f = state.folderById[state.filter];
-      emptyEl.innerHTML = '<b>🗂️</b>No clients in ' + esc(f ? f.name : 'this folder') +
-                          ' yet — tap + to add one.';
-    } else if (!state.clients.length) {
-      emptyEl.innerHTML = '<b>💕</b>No clients yet — tap + to add your first.';
     } else {
-      emptyEl.innerHTML = '<b>💕</b>Nothing here yet.';
+      emptyEl.innerHTML = '<b>💕</b>No clients yet — tap + to add your first.';
     }
     return;
   }
@@ -392,11 +414,6 @@ function renderList() {
   emptyEl.hidden = true;
   appendChunk();
   fillViewport();
-}
-
-function renderAll() {
-  renderChips();
-  renderList();
 }
 
 /* ------------------------------------------------------------
@@ -419,25 +436,6 @@ $('search-clear').addEventListener('click', function () {
 });
 $('search').addEventListener('keydown', function (e) {
   if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
-});
-
-/* ------------------------------------------------------------
-   Folder chips interaction
-   ------------------------------------------------------------ */
-$('folder-chips').addEventListener('click', function (e) {
-  var editEl = e.target.closest('[data-edit]');
-  if (editEl) {
-    e.stopPropagation();
-    openFolderEditor(editEl.getAttribute('data-edit'));
-    return;
-  }
-  var chip = e.target.closest('[data-folder]');
-  if (!chip) return;
-  var id = chip.getAttribute('data-folder');
-  if (id === state.filter) return;
-  state.filter = id;
-  renderAll();
-  $('list-scroll').scrollTop = 0;
 });
 
 /* ------------------------------------------------------------
@@ -583,7 +581,7 @@ listHost.addEventListener('contextmenu', function (e) {
 });
 
 /* ------------------------------------------------------------
-   Client detail
+   Client detail — the client's stack of dated notes
    ------------------------------------------------------------ */
 function openClientDetail(id) {
   var c = clientById(id);
@@ -597,67 +595,121 @@ function renderDetail() {
   var c = clientById(state.viewingClientId);
   if (!c) return;
   $('detail-title').textContent = c.name || 'Client';
+  $('detail-name').textContent = c.name || 'Untitled';
 
-  var html = '<h2 class="detail-name">' + esc(c.name || 'Untitled') + '</h2>';
-  var f = state.folderById[c.folderId];
-  if (f) html += '<div class="detail-folder">' + esc(f.name) + '</div>';
-
-  var formula = '';
-  for (var i = 0; i < FORMULA_FIELDS.length; i++) {
-    var key = FORMULA_FIELDS[i][0], label = FORMULA_FIELDS[i][1];
-    var v = trim(c[key]);
-    if (!v) continue;
-    formula += '<div class="dt"><div class="dt-lbl">' + esc(label) + '</div>' +
-               '<div class="dt-val">' + esc(v) + '</div></div>';
+  var html = '';
+  for (var i = 0; i < c.notes.length; i++) {
+    var n = c.notes[i];
+    html += '<button type="button" class="note-card" data-note="' + esc(n.id) + '">' +
+              '<span class="note-date">' + esc(fmtDate(n.date)) + '</span>' +
+              (trim(n.text)
+                ? '<span class="note-text">' + esc(n.text) + '</span>'
+                : '<span class="note-text note-blank">No text</span>') +
+            '</button>';
   }
-  if (formula) {
-    html += '<p class="section-label">Formula</p><div class="card">' + formula + '</div>';
+  if (!c.notes.length) {
+    html = '<p class="hint" style="margin-top:6px">No notes yet — tap + to write the first one.</p>';
   }
-
-  var notes = trim(c.notes);
-  if (notes) {
-    html += '<p class="section-label">Notes</p><div class="card">' +
-            '<div class="dt"><div class="dt-val">' + esc(notes) + '</div></div></div>';
-  }
-
-  if (!formula && !notes) {
-    html += '<p class="hint" style="margin-top:22px">No formula or notes yet — tap Edit to add them.</p>';
-  }
-
-  $('detail-body').innerHTML = html;
+  $('notes-list').innerHTML = html;
 }
 
 $('btn-detail-back').addEventListener('click', back);
 $('btn-detail-edit').addEventListener('click', function () {
   openClientEditor(state.viewingClientId);
 });
+$('btn-add-note').addEventListener('click', function () {
+  openNoteEditor(null);
+});
+$('notes-list').addEventListener('click', function (e) {
+  var card = e.target.closest('[data-note]');
+  if (card) openNoteEditor(card.getAttribute('data-note'));
+});
 
 /* ------------------------------------------------------------
-   Client editor
+   Note editor — date is the header, set automatically
    ------------------------------------------------------------ */
-function fillFolderSelect(selectedId) {
-  var html = '<option value="">No folder</option>';
-  for (var i = 0; i < state.folders.length; i++) {
-    var f = state.folders[i];
-    html += '<option value="' + esc(f.id) + '">' + esc(f.name) + '</option>';
-  }
-  var sel = $('f-folder');
-  sel.innerHTML = html;
-  sel.value = selectedId && state.folderById[selectedId] ? selectedId : '';
+var noteDraftDate = 0;
+
+function openNoteEditor(noteId) {
+  var c = clientById(state.viewingClientId);
+  if (!c) return;
+  var n = noteId ? noteById(c, noteId) : null;
+
+  state.editingNoteId = n ? n.id : null;
+  noteDraftDate = n ? n.date : Date.now();
+
+  $('note-title').textContent = c.name || 'Note';
+  $('note-date').textContent = fmtDate(noteDraftDate);
+  $('f-note').value = n ? n.text : '';
+  $('note-delete-wrap').hidden = !n;
+
+  go('screen-note');
+  if (!n) setTimeout(function () { try { $('f-note').focus(); } catch (e) {} }, 260);
 }
 
+function saveNote() {
+  var c = clientById(state.viewingClientId);
+  if (!c) { back(); return; }
+
+  var text = $('f-note').value.replace(/\s+$/, '');
+  var existing = state.editingNoteId ? noteById(c, state.editingNoteId) : null;
+
+  if (!existing && !trim(text)) {
+    // Nothing written — quietly drop the empty note.
+    state.editingNoteId = null;
+    back();
+    return;
+  }
+
+  if (existing) {
+    existing.text = text;
+  } else {
+    c.notes.push({ id: uid(), date: noteDraftDate, text: text });
+  }
+  sortNotes(c);
+  c.updatedAt = Date.now();
+  DB.put(STORE_CLIENTS, stripClient(c));
+
+  state.editingNoteId = null;
+  renderDetail();
+  renderList();
+  back();
+  toast(existing ? 'Saved' : 'Note added');
+}
+
+$('btn-note-save').addEventListener('click', saveNote);
+$('btn-note-cancel').addEventListener('click', function () {
+  state.editingNoteId = null;
+  back();
+});
+
+$('btn-note-delete').addEventListener('click', function () {
+  var c = clientById(state.viewingClientId);
+  var n = c && state.editingNoteId ? noteById(c, state.editingNoteId) : null;
+  if (!n) return;
+  confirmDialog('Delete this note?', 'The ' + fmtDate(n.date) + ' note will be gone for good.', 'Delete')
+    .then(function (ok) {
+      if (!ok) return;
+      c.notes.splice(c.notes.indexOf(n), 1);
+      c.updatedAt = Date.now();
+      DB.put(STORE_CLIENTS, stripClient(c));
+      state.editingNoteId = null;
+      renderDetail();
+      renderList();
+      back();
+      toast('Note deleted');
+    });
+});
+
+/* ------------------------------------------------------------
+   Client editor — just the name
+   ------------------------------------------------------------ */
 function openClientEditor(id) {
   var c = id ? clientById(id) : null;
   state.editingClientId = c ? c.id : null;
 
   $('edit-title').textContent = c ? 'Edit Client' : 'New Client';
   $('f-name').value = c ? (c.name || '') : '';
-  fillFolderSelect(c ? c.folderId : (state.filter !== 'all' ? state.filter : ''));
-  for (var i = 0; i < FORMULA_FIELDS.length; i++) {
-    var key = FORMULA_FIELDS[i][0];
-    $('f-' + key).value = c ? (c[key] || '') : '';
-  }
-  $('f-notes').value = c ? (c.notes || '') : '';
   $('edit-delete-wrap').hidden = !c;
 
   go('screen-edit');
@@ -669,45 +721,46 @@ function saveClient() {
   if (!name) { toast('Add a name first.'); try { $('f-name').focus(); } catch (e) {} return; }
 
   var existing = state.editingClientId ? clientById(state.editingClientId) : null;
-  var c = existing || { id: uid(), createdAt: Date.now() };
+  var c = existing || { id: uid(), notes: [], createdAt: Date.now() };
   c.name = name;
-  var folderVal = $('f-folder').value;
-  c.folderId = folderVal && state.folderById[folderVal] ? folderVal : '';
-  for (var i = 0; i < FORMULA_FIELDS.length; i++) {
-    var key = FORMULA_FIELDS[i][0];
-    c[key] = trim($('f-' + key).value);
-  }
-  c.notes = $('f-notes').value.replace(/\s+$/, '');
   c.updatedAt = Date.now();
   decorate(c);
 
   if (!existing) state.clients.push(c);
   sortByName(state.clients);
-
-  var persisted = { id: c.id, name: c.name, folderId: c.folderId, notes: c.notes,
-                    createdAt: c.createdAt, updatedAt: c.updatedAt };
-  for (var j = 0; j < FORMULA_FIELDS.length; j++) persisted[FORMULA_FIELDS[j][0]] = c[FORMULA_FIELDS[j][0]];
-  DB.put(STORE_CLIENTS, persisted);
+  DB.put(STORE_CLIENTS, stripClient(c));
 
   state.editingClientId = null;
-  renderAll();
+  renderList();
 
-  // The editor is always opened from the list (new) or the detail view (edit),
-  // so one step back lands exactly where she came from.
-  if (stack[stack.length - 2] === 'screen-client') {
+  if (existing) {
+    // Renamed from the detail view — go back to it.
     state.viewingClientId = c.id;
     renderDetail();
+    back();
+    toast('Saved');
+  } else {
+    // Brand-new client: swap the editor for their page so the
+    // first note is one tap away. Back from there = the list.
+    stack.pop();
+    stack.push('screen-client');
+    state.viewingClientId = c.id;
+    renderDetail();
+    showScreen('screen-client');
+    toast('Client added');
   }
-  back();
-  toast(existing ? 'Saved' : 'Client added');
 }
 
+$('btn-plus').addEventListener('click', function () { openClientEditor(null); });
 $('btn-edit-save').addEventListener('click', saveClient);
 $('btn-edit-cancel').addEventListener('click', function () {
   state.editingClientId = null;
   back();
 });
 $('client-form').addEventListener('submit', function (e) { e.preventDefault(); saveClient(); });
+$('f-name').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); saveClient(); }
+});
 $('btn-edit-delete').addEventListener('click', function () {
   askDeleteClient(state.editingClientId);
 });
@@ -715,7 +768,9 @@ $('btn-edit-delete').addEventListener('click', function () {
 function askDeleteClient(id) {
   var c = clientById(id);
   if (!c) return;
+  var n = c.notes.length;
   confirmDialog('Delete ' + (c.name || 'this client') + '?',
+                (n ? 'Their ' + (n === 1 ? 'note' : n + ' notes') + ' will be deleted too. ' : '') +
                 'This can\'t be undone.', 'Delete').then(function (ok) {
     if (!ok) { closeOpenRow(); return; }
     deleteClient(id);
@@ -744,94 +799,17 @@ function deleteClient(id) {
 }
 
 /* ------------------------------------------------------------
-   Folder editor
-   ------------------------------------------------------------ */
-function openFolderEditor(id) {
-  var f = id ? state.folderById[id] : null;
-  state.editingFolderId = f ? f.id : null;
-  $('folder-title').textContent = f ? 'Edit Folder' : 'New Folder';
-  $('f-folder-name').value = f ? f.name : '';
-  $('folder-delete-wrap').hidden = !f;
-  go('screen-folder');
-  if (!f) setTimeout(function () { try { $('f-folder-name').focus(); } catch (e) {} }, 260);
-}
-
-function saveFolder() {
-  var name = trim($('f-folder-name').value);
-  if (!name) { toast('Give the folder a name.'); return; }
-
-  var f = state.editingFolderId ? state.folderById[state.editingFolderId] : null;
-  if (!f) {
-    f = { id: uid(), name: name, createdAt: Date.now() };
-    state.folders.push(f);
-  } else {
-    f.name = name;
-  }
-  f._k = nameKey(name);
-  sortByName(state.folders);
-  reindexFolders();
-  DB.put(STORE_FOLDERS, { id: f.id, name: f.name, createdAt: f.createdAt });
-
-  if (!state.editingFolderId) state.filter = f.id;
-  state.editingFolderId = null;
-  renderAll();
-  back();
-  toast('Saved');
-}
-
-$('btn-folder-save').addEventListener('click', saveFolder);
-$('btn-folder-cancel').addEventListener('click', function () {
-  state.editingFolderId = null;
-  back();
-});
-$('f-folder-name').addEventListener('keydown', function (e) {
-  if (e.key === 'Enter') { e.preventDefault(); saveFolder(); }
-});
-
-$('btn-folder-delete').addEventListener('click', function () {
-  var id = state.editingFolderId;
-  var f = state.folderById[id];
-  if (!f) return;
-  var count = 0;
-  for (var i = 0; i < state.clients.length; i++) if (state.clients[i].folderId === id) count++;
-  confirmDialog('Delete “' + f.name + '”?',
-    count ? count + (count === 1 ? ' client stays' : ' clients stay') + ' in All Clients.'
-          : 'This folder is empty.',
-    'Delete Folder').then(function (ok) {
-    if (!ok) return;
-    for (var i = 0; i < state.clients.length; i++) {
-      var c = state.clients[i];
-      if (c.folderId === id) {
-        c.folderId = '';
-        c.updatedAt = Date.now();
-        DB.put(STORE_CLIENTS, stripClient(c));
-      }
-    }
-    var idx = state.folders.indexOf(f);
-    if (idx > -1) state.folders.splice(idx, 1);
-    reindexFolders();
-    DB.del(STORE_FOLDERS, id);
-    if (state.filter === id) state.filter = 'all';
-    state.editingFolderId = null;
-    renderAll();
-    back();
-    toast('Folder deleted');
-  });
-});
-
-function stripClient(c) {
-  var o = { id: c.id, name: c.name, folderId: c.folderId || '', notes: c.notes || '',
-            createdAt: c.createdAt || Date.now(), updatedAt: c.updatedAt || Date.now() };
-  for (var i = 0; i < FORMULA_FIELDS.length; i++) o[FORMULA_FIELDS[i][0]] = c[FORMULA_FIELDS[i][0]] || '';
-  return o;
-}
-
-/* ------------------------------------------------------------
    Settings, backup & import
    ------------------------------------------------------------ */
+function noteCount() {
+  var n = 0;
+  for (var i = 0; i < state.clients.length; i++) n += state.clients[i].notes.length;
+  return n;
+}
+
 $('btn-settings').addEventListener('click', function () {
   $('stat-clients').textContent = state.clients.length;
-  $('stat-folders').textContent = state.folders.length;
+  $('stat-notes').textContent = noteCount();
   $('stat-version').textContent = APP_VERSION;
   go('screen-settings');
 });
@@ -840,9 +818,8 @@ $('btn-settings-back').addEventListener('click', back);
 function backupPayload() {
   return {
     app: 'mos-management',
-    schema: 1,
+    schema: 2,
     exportedAt: new Date().toISOString(),
-    folders: state.folders.map(function (f) { return { id: f.id, name: f.name, createdAt: f.createdAt }; }),
     clients: state.clients.map(stripClient)
   };
 }
@@ -902,52 +879,35 @@ $('import-file').addEventListener('change', function () {
 
     if (!data || !Array.isArray(data.clients)) { toast('That file isn\'t a Mo\'s Management backup.'); return; }
 
-    var folders = (Array.isArray(data.folders) ? data.folders : [])
-      .filter(function (f) { return f && f.id && trim(f.name); })
-      .map(function (f) { return { id: String(f.id), name: trim(f.name), createdAt: f.createdAt || Date.now() }; });
-
-    var seen = Object.create(null);
-    for (var i = 0; i < folders.length; i++) seen[folders[i].id] = true;
-
-    var clients = data.clients
-      .filter(function (c) { return c && (trim(c.name) || c.id); })
-      .map(function (c) {
-        var o = { id: c.id ? String(c.id) : uid(), name: trim(c.name), folderId: '',
-                  notes: c.notes == null ? '' : String(c.notes),
-                  createdAt: c.createdAt || Date.now(), updatedAt: c.updatedAt || Date.now() };
-        if (c.folderId && seen[c.folderId]) o.folderId = String(c.folderId);
-        for (var k = 0; k < FORMULA_FIELDS.length; k++) {
-          var key = FORMULA_FIELDS[k][0];
-          o[key] = c[key] == null ? '' : String(c[key]);
-        }
-        return o;
-      });
+    // Both backup generations import cleanly: old formula-style
+    // clients are folded into dated notes on the way in.
+    var clients = [];
+    var count = 0;
+    for (var i = 0; i < data.clients.length; i++) {
+      var raw = data.clients[i];
+      if (!raw || (!trim(raw.name) && !raw.id)) continue;
+      if (!raw.id) raw.id = uid();
+      var m = migrateClient(raw);
+      clients.push(decorate(m.client));
+      count += m.client.notes.length;
+    }
 
     confirmDialog('Import backup?',
       'This replaces everything on this device with ' + clients.length + ' client' +
-      (clients.length === 1 ? '' : 's') + ' and ' + folders.length + ' folder' +
-      (folders.length === 1 ? '' : 's') + '.',
+      (clients.length === 1 ? '' : 's') + ' and ' + count + ' note' +
+      (count === 1 ? '' : 's') + '.',
       'Import').then(function (ok) {
       if (!ok) return;
-      state.folders = folders.map(function (f) { f._k = nameKey(f.name); return f; });
-      state.clients = clients.map(decorate);
-      sortByName(state.folders);
+      state.clients = clients;
       sortByName(state.clients);
-      reindexFolders();
-      state.filter = 'all';
       state.query = '';
       $('search').value = '';
       $('search-clear').hidden = true;
 
-      Promise.all([
-        DB.replaceAll(STORE_FOLDERS, state.folders.map(function (f) {
-          return { id: f.id, name: f.name, createdAt: f.createdAt };
-        })),
-        DB.replaceAll(STORE_CLIENTS, state.clients.map(stripClient))
-      ]).then(function () {
+      DB.replaceAll(STORE_CLIENTS, state.clients.map(stripClient)).then(function () {
         $('stat-clients').textContent = state.clients.length;
-        $('stat-folders').textContent = state.folders.length;
-        renderAll();
+        $('stat-notes').textContent = noteCount();
+        renderList();
         toast('Imported ' + state.clients.length + ' client' + (state.clients.length === 1 ? '' : 's'));
       });
     });
@@ -961,19 +921,24 @@ $('import-file').addEventListener('change', function () {
 function boot() {
   try { history.replaceState({ depth: 1 }, ''); } catch (e) {}
 
-  Promise.all([DB.getAll(STORE_CLIENTS), DB.getAll(STORE_FOLDERS)]).then(function (res) {
-    var clients = res[0] || [], folders = res[1] || [];
-    state.folders = folders.filter(function (f) { return f && f.id; })
-      .map(function (f) { f._k = nameKey(f.name); return f; });
-    sortByName(state.folders);
-    reindexFolders();
-
-    state.clients = clients.filter(function (c) { return c && c.id; }).map(decorate);
+  DB.getAll(STORE_CLIENTS).then(function (rows) {
+    var migratedAny = false;
+    state.clients = [];
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i] || !rows[i].id) continue;
+      var m = migrateClient(rows[i]);
+      state.clients.push(decorate(m.client));
+      if (m.migrated) {
+        migratedAny = true;
+        DB.put(STORE_CLIENTS, stripClient(m.client));
+      }
+    }
     sortByName(state.clients);
+    if (migratedAny) DB.clear(STORE_FOLDERS);   // folders are gone in v2
 
-    renderAll();
+    renderList();
   }).catch(function () {
-    renderAll();
+    renderList();
     toast('Could not load saved data.');
   });
 }
